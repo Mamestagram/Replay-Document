@@ -1,3 +1,56 @@
+@register(ClientPackets.CHANGE_ACTION, restricted=True)
+class ChangeAction(BasePacket):
+    def __init__(self, reader: BanchoPacketReader) -> None:
+        self.action = reader.read_u8()
+        self.info_text = reader.read_string()
+        self.map_md5 = reader.read_string()
+
+        self.mods = reader.read_u32()
+        self.mode = reader.read_u8()
+        if self.mods & Mods.RELAX:
+            if self.mode == 3:  # rx!mania doesn't exist
+                self.mods &= ~Mods.RELAX
+            else:
+                self.mode += 4
+        elif self.mods & Mods.AUTOPILOT:
+            if self.mode in (1, 2, 3):  # ap!catch, taiko and mania don't exist
+                self.mods &= ~Mods.AUTOPILOT
+            else:
+                self.mode += 8
+
+        self.map_id = reader.read_i32()
+
+    async def handle(self, player: Player) -> None:
+        # update the user's status.
+        player.status.action = Action(self.action)
+        player.status.info_text = self.info_text
+        player.status.map_md5 = self.map_md5
+        player.status.mods = Mods(self.mods)
+        player.status.mode = GameMode(self.mode)
+        player.status.map_id = self.map_id
+
+        print("action: ", self.action)
+
+        # 本番環境はself.action 12のみにする
+        if self.action in (2, 12):
+            if app.state.sessions.bot not in player.spectators:
+                player.add_spectator(app.state.sessions.bot)
+        else:
+            if app.state.sessions.bot in player.spectators:
+                player.last_sec = -6974
+                # debug
+
+                test_file = pathlib.Path.cwd() / "test.txt"
+                test_file.write_text(player.replay_)
+
+                player.replay_ = ""
+
+                player.remove_spectator(app.state.sessions.bot)
+
+        # broadcast it to all online players.
+        if not player.restricted:
+            app.state.sessions.players.enqueue(app.packets.user_stats(player))
+
 @register(ClientPackets.SPECTATE_FRAMES)
 class SpectateFrames(BasePacket):
     def __init__(self, reader: BanchoPacketReader) -> None:
