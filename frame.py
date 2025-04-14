@@ -16,28 +16,39 @@ class SpectateFrames(BasePacket):
             + self.frame_bundle.raw_data
         )
 
-        last_sec = -6974
+        print(int(self.frame_bundle.action))
+
         current_time = -6974
         trash = ""
 
-        for rep in self.frame_bundle.replay_frames:
-            if last_sec == -6974:
-                current_time = rep.time
-                if rep.time < 1000:
-                    player.replay_current_sec = rep.time
-                last_sec = rep.time
+        if self.frame_bundle.action in (ReplayAction.Skip, ReplayAction.NewSong):
+            player.last_sec = -6974
+            player.replay_ = ""
+            print("reset")
+            return
 
-                y = "{:.5f}".format(rep.y)
-                trash += f"{rep.time + 1}|{int(rep.x)}|{y}|{rep.button_state},\n"
-            else:
-                time = abs(last_sec - rep.time)
-                y = "{:.5f}".format(rep.y)
-                trash += f"{time}|{int(rep.x)}|{y}|{rep.button_state},\n"
-                last_sec = rep.time
+        for rep in self.frame_bundle.replay_frames:
+
+            current_time = rep.time
+            x = "{:.5f}".format(rep.x)
+            y = "{:.5f}".format(rep.y)
+
+            if player.last_sec == -6974:
+                player.replay_current_sec = rep.time
+            trash += f"{rep.time + 1}|{x}|{y}|{rep.button_state},"
+            player.last_sec = rep.time
+
         player.replay_ += trash
 
         if current_time - player.replay_current_sec > 10000:
             player.replay_current_sec = current_time
             # wip: これをrequestにする (webに)
             print(player.replay_)
-            player.replay_ = ""
+
+            # 本番環境では下のコメントアウトを解除する
+            # player.replay_ = ""
+
+        # enqueue the data
+        # to all spectators.
+        for spectator in player.spectators:
+            spectator.enqueue(data)
